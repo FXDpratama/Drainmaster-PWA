@@ -1,0 +1,428 @@
+<!doctype html>
+<html lang="id">
+<head>
+  <meta charset="utf-8">
+  <meta name="viewport" content="width=device-width,initial-scale=1,viewport-fit=cover">
+  <title>DrainMaster — Dewatering Calculator (Prototype)</title>
+  <script src="https://cdn.jsdelivr.net/npm/chart.js"></script>
+  <script src="https://cdnjs.cloudflare.com/ajax/libs/jspdf/2.5.1/jspdf.umd.min.js"></script>
+  <style>
+    :root{--bg:#ffffff;--card:#f8fafc;--accent:#06b6d4;--muted:#64748b;--good:#10b981;--text:#1e293b;--border:rgba(0,0,0,0.1)}
+    body{font-family:Inter,ui-sans-serif,system-ui,Segoe UI,Roboto,Helvetica,Arial; background:var(--bg); color:var(--text); margin:0; padding:16px}
+    .wrap{max-width:100%;margin:0 auto}
+    h1{margin:0 0 12px;font-size:24px;font-weight:600}
+    .grid{display:grid;grid-template-columns:1fr;gap:16px}
+    .card{background:var(--card);padding:16px;border-radius:12px;box-shadow:0 2px 8px rgba(0,0,0,0.1);border:1px solid var(--border)}
+    label{display:block;font-size:14px;color:var(--muted);margin-bottom:4px;font-weight:500}
+    input[type=number],select{width:100%;padding:12px;border-radius:8px;background:#ffffff;border:1px solid var(--border);color:var(--text);font-size:16px}
+    input[type=number]:focus,select:focus{outline:none;border-color:var(--accent)}
+    .row{display:flex;gap:8px;flex-wrap:wrap}
+    .half{flex:1;min-width:calc(50% - 4px)}
+    button{background:var(--accent);border:none;padding:12px 16px;border-radius:8px;color:white;cursor:pointer;font-weight:600;font-size:16px}
+    button:hover{background:#0891b2}
+    .muted{color:var(--muted);font-size:14px}
+    table{width:100%;border-collapse:collapse;margin-top:12px}
+    th,td{padding:12px 8px;border-bottom:1px solid var(--border);text-align:left;font-size:14px}
+    th{background:var(--card);font-weight:600}
+    .small{font-size:13px;color:var(--muted)}
+    .good{color:var(--good);font-weight:600}
+    .warn{color:#f59e0b;font-weight:600}
+    .danger{color:#ef4444;font-weight:600}
+    .recommended{background:var(--good);color:white;padding:2px 6px;border-radius:4px;font-size:12px}
+    .footer{margin-top:12px;color:var(--muted);font-size:13px}
+    p.muted{margin-bottom:16px}
+    canvas{max-width:100%;height:300px;margin:16px 0}
+    #exportBtn{background:#10b981;margin-top:8px}
+
+    /* Mobile Responsif */
+    @media (max-width: 768px) {
+      body{padding:12px}
+      .row{flex-direction:column;gap:0}
+      .half{min-width:100%;margin-bottom:8px}
+      input[type=number],select{padding:14px;font-size:18px}
+      button{width:100%;margin-bottom:8px}
+      h1{font-size:20px}
+      .grid{gap:12px}
+      .card{padding:12px}
+      table{font-size:13px}
+      th,td{padding:8px 4px}
+    }
+
+    @media (min-width: 769px) {
+      .wrap{max-width:800px}
+      .grid{grid-template-columns:1fr 350px;gap:20px}
+      body{padding:24px}
+    }
+  
+/* Mobile touch improvements added by assistant */
+@media (max-width: 900px) {
+  input[type=number], select { font-size: 18px !important; padding: 14px !important; }
+  button { min-height: 52px !important; font-size: 17px !important; border-radius:12px !important; }
+  .action-bar{position:fixed;left:12px;right:12px;bottom:12px;display:flex;gap:10px;z-index:40}
+  .action-bar button{flex:1;padding:12px;font-size:16px}
+  #outputCard{padding-bottom:80px}
+}
+
+</style>
+</head>
+<body>
+  <div class="wrap">
+    <h1>DrainMaster — Dewatering Calculator (Prototype)</h1>
+    <p class="muted">Masukkan data lapangan di kolom kiri, klik <strong>Hitung</strong>. Prototype ini menghitung kebutuhan flow, head, daya, dan merekomendasikan konfigurasi pipa (single).</p>
+    <div class="grid">
+      <div class="card">
+        <h2 style="font-size:18px;margin-bottom:12px;font-weight:600">Input Data</h2>
+
+        <label>Luas sump (m²)</label>
+        <input id="areaSump" type="number" value="1000" min="0">
+
+        <div class="row" style="margin-top:8px">
+          <div class="half">
+            <label>RL permukaan awal (m)</label>
+            <input id="rlStart" type="number" value="50">
+          </div>
+          <div class="half">
+            <label>RL target (m)</label>
+            <input id="rlTarget" type="number" value="20">
+          </div>
+        </div>
+
+        <label style="margin-top:8px">Water inflow dasar (m³/jam)</label>
+        <input id="inflowBase" type="number" value="1000">
+
+        <div class="row" style="margin-top:8px">
+          <div class="half">
+            <label>Target waktu (hari)</label>
+            <input id="targetDays" type="number" value="7" min="0.01">
+          </div>
+          <div class="half">
+            <label>Panjang pipa (m)</label>
+            <input id="pipeLength" type="number" value="1000">
+          </div>
+        </div>
+
+        <label style="margin-top:8px">Static head (m) — elevasi sump → disposal</label>
+        <input id="staticHead" type="number" value="50">
+
+        <label style="margin-top:8px">Planning flow pompa yang dimiliki (m³/jam)</label>
+        <input id="planningFlow" type="number" value="0" min="0">
+
+        <h3 style="margin-top:16px;font-size:16px;font-weight:600">Hydrologi / Hujan</h3>
+        <p class="small">Intensitas hujan diasumsikan konstan (misalnya, curah hujan rata-rata atau skenario worst-case) sepanjang periode target waktu. Ini bukan prediksi hujan harian variabel, melainkan inflow tambahan konstan dari hujan untuk perhitungan konservatif.</p>
+        <div class="row">
+          <div class="half">
+            <label>Intensitas hujan (mm/jam)</label>
+            <input id="rainIntensity" type="number" value="0">
+          </div>
+          <div class="half">
+            <label>Catchment area (m²)</label>
+            <input id="catchmentArea" type="number" value="5000">
+          </div>
+        </div>
+        <div class="row" style="margin-top:8px">
+          <div class="half">
+            <label>Runoff coefficient (0-1)</label>
+            <input id="runoffCoeff" type="number" value="0.8" step="0.01" min="0" max="1">
+          </div>
+          <div class="half">
+            <label>Include direct rainfall to sump?</label>
+            <select id="includeDirect">
+              <option value="1" selected>Ya</option>
+              <option value="0">Tidak</option>
+            </select>
+          </div>
+        </div>
+
+        <h3 style="margin-top:16px;font-size:16px;font-weight:600">Pipa & Efisiensi</h3>
+        <label>Jenis Material Pipa</label>
+        <select id="material">
+          <option value="150" selected>HDPE (C=150)</option>
+          <option value="150">PVC (C=150)</option>
+          <option value="120">Steel (C=120)</option>
+          <option value="100">Cast Iron (C=100)</option>
+          <option value="140">Lainnya (C=140)</option>
+        </select>
+        <div class="row" style="margin-top:8px">
+          <div class="half">
+            <label>Efisiensi gabungan pompa+motor (%)</label>
+            <input id="eff" type="number" value="70" min="10" max="95">
+          </div>
+          <div class="half">
+            <label>Jumlah Elbow (90°)</label>
+            <input id="numElbow" type="number" value="2" min="0">
+          </div>
+        </div>
+        <div class="row" style="margin-top:8px">
+          <div class="half">
+            <label>Jumlah Tee</label>
+            <input id="numTee" type="number" value="1" min="0">
+          </div>
+          <div class="half">
+            <label>Jumlah NRV (Non-Return Valve)</label>
+            <input id="numNRV" type="number" value="1" min="0">
+          </div>
+        </div>
+
+        <h3 style="margin-top:16px;font-size:16px;font-weight:600">NPSH Data</h3>
+        <div class="row">
+          <div class="half">
+            <label>Suction hose level (m) — elevasi di atas permukaan air</label>
+            <input id="suctionLevel" type="number" value="1" min="0">
+          </div>
+          <div class="half">
+            <label>Temperatur air (°C)</label>
+            <input id="waterTemp" type="number" value="25" min="0" max="100">
+          </div>
+        </div>
+
+        <div style="margin-top:16px;display:flex;gap:8px;flex-wrap:wrap">
+          <button id="calcBtn" style="flex:1">Hitung</button>
+          <button id="resetBtn" style="background:#94a3b8;color:#021;flex:1" type="button">Reset</button>
+        </div>
+
+        <p class="footer">Prototype: Hazen-Williams (SI). Hasil perkiraan; cek NPSH, padatan & spare pump di lapangan sebelum pembelian. Minor loss dihitung berdasarkan fitting dengan K standar (Elbow K=0.9, Tee K=1.0, NRV K=2.5).</p>
+      </div>
+
+      <div class="card" id="outputCard">
+        <h2 style="font-size:18px;margin-bottom:12px;font-weight:600">Hasil & Rekomendasi</h2>
+        <div id="summaryArea">
+          <p class="small">Tekan <strong>Hitung</strong> untuk melihat hasil.</p>
+        </div>
+      </div>
+    </div>
+  </div>
+  <script>
+    // Helper utilities
+    const pipes = [
+      {name: '8"', D: 0.2032},
+      {name: '12"', D: 0.3048},
+      {name: '14"', D: 0.3556},
+      {name: '16"', D: 0.4064},
+      {name: '20"', D: 0.5080}
+    ];
+
+    function mmToM3PerHour(mmPerHour, area_m2){
+      return mmPerHour * area_m2 * 0.001; // 1 mm over 1 m2 = 0.001 m3
+    }
+
+    // Hazen-Williams head loss (SI) for length L (m), Q (m3/s), D (m), C
+    // hf = 10.67 * L * Q^1.852 / (C^1.852 * D^4.87)
+    function hazenWilliams(L,Q,D,C){
+      if(Q<=0) return 0;
+      return 10.67 * L * Math.pow(Q,1.852) / (Math.pow(C,1.852) * Math.pow(D,4.87));
+    }
+
+    // Minor loss: h_minor = Σ K * (v^2 / 2g), with standard K values
+    function calculateMinorLoss(Q, D, numElbow, numTee, numNRV) {
+      const v = Q / (Math.PI * Math.pow(D/2, 2)); // velocity m/s
+      const g = 9.81;
+      const K_elbow = 0.9; // standard for 90° elbow
+      const K_tee = 1.0; // standard for tee
+      const K_nrv = 2.5; // approximate for NRV
+      const totalK = (numElbow * K_elbow) + (numTee * K_tee) + (numNRV * K_nrv);
+      return totalK * (Math.pow(v, 2) / (2 * g));
+    }
+
+    // Approximate vapor pressure (kPa) based on temperature (°C)
+    function vaporPressure(tempC) {
+      return 0.6108 * Math.exp(17.27 * tempC / (tempC + 237.3));
+    }
+
+    // NPSHa calculation (m)
+    function calculateNPSHa(suctionLevel, tempC) {
+      const atmHead = 10.33;
+      const pv = vaporPressure(tempC);
+      const vaporHead = pv / 9.81;
+      const suctionHead = -suctionLevel;
+      const frictionSuction = 0;
+      return atmHead + suctionHead - vaporHead - frictionSuction;
+    }
+
+    function format(n, dp=2){return Number(n).toLocaleString('id-ID',{maximumFractionDigits:dp,minimumFractionDigits:dp})}
+
+    let configChart = null;
+
+    document.getElementById('calcBtn').addEventListener('click', ()=>{
+      // read inputs
+      const area = parseFloat(document.getElementById('areaSump').value) || 0;
+      const rlStart = parseFloat(document.getElementById('rlStart').value) || 0;
+      const rlTarget = parseFloat(document.getElementById('rlTarget').value) || 0;
+      const inflowBase = parseFloat(document.getElementById('inflowBase').value) || 0;
+      const targetDays = parseFloat(document.getElementById('targetDays').value) || 1;
+      const pipeL = parseFloat(document.getElementById('pipeLength').value) || 1000;
+      const staticHead = parseFloat(document.getElementById('staticHead').value) || 0;
+      const planningFlow = parseFloat(document.getElementById('planningFlow').value) || 0;
+      const I = parseFloat(document.getElementById('rainIntensity').value) || 0;
+      const catchA = parseFloat(document.getElementById('catchmentArea').value) || 0;
+      const Crun = parseFloat(document.getElementById('runoffCoeff').value) || 0.8;
+      const includeDirect = document.getElementById('includeDirect').value === '1';
+      const hwC = parseFloat(document.getElementById('material').value) || 140;
+      const effPct = parseFloat(document.getElementById('eff').value) || 70;
+      const numElbow = parseFloat(document.getElementById('numElbow').value) || 0;
+      const numTee = parseFloat(document.getElementById('numTee').value) || 0;
+      const numNRV = parseFloat(document.getElementById('numNRV').value) || 0;
+      const suctionLevel = parseFloat(document.getElementById('suctionLevel').value) || 1;
+      const waterTemp = parseFloat(document.getElementById('waterTemp').value) || 25;
+
+      // fundamental calculations
+      const deltaH = Math.max(0, rlStart - rlTarget);
+      const volToRemove = area * deltaH;
+      const hours = targetDays * 24;
+      const netRemovalRate = volToRemove / hours;
+
+      // rainfall contributions
+      const qRunoff = mmToM3PerHour(I, catchA) * Crun;
+      const qDirect = includeDirect ? mmToM3PerHour(I, area) : 0;
+      const qRainTotal = qRunoff + qDirect;
+      const volRainTotal = qRainTotal * hours;
+
+      const inflowTotal = inflowBase + qRainTotal;
+
+      // required pump flow (total) to meet target
+      const qPumpTotal_m3h = inflowTotal + netRemovalRate;
+      const qPumpTotal_m3s = qPumpTotal_m3h / 3600;
+
+      // Planning flow analysis
+      let planningTimeDays = '';
+      let planningComparison = '';
+      if (planningFlow > 0) {
+        if (planningFlow <= inflowTotal) {
+          planningTimeDays = `<span class="danger">Tidak cukup (hanya bisa handle inflow, tidak bisa remove volume)</span>`;
+        } else {
+          const netRemovalWithPlanning = planningFlow - inflowTotal;
+          const planningHours = volToRemove / netRemovalWithPlanning;
+          planningTimeDays = `${format(planningHours / 24, 1)} hari`;
+          const timeDiff = targetDays - (planningHours / 24);
+          if (timeDiff > 0) {
+            planningComparison = ` (lebih cepat ${format(timeDiff,1)} hari dari target)`;
+          } else if (timeDiff < 0) {
+            planningComparison = ` (lebih lambat ${format(-timeDiff,1)} hari dari target)`;
+          } else {
+            planningComparison = ' (sesuai target)';
+          }
+        }
+      } else {
+        planningTimeDays = 'Tidak diisi';
+      }
+
+      // NPSHa
+      const npsha = calculateNPSHa(suctionLevel, waterTemp);
+
+      // Evaluate single pipe configurations
+      function evaluateConfig(pipe){
+        const q_m3s = qPumpTotal_m3s; // Single pipe: full flow
+        const velocity = q_m3s / (Math.PI * Math.pow(pipe.D/2,2));
+        const hf = hazenWilliams(pipeL, q_m3s, pipe.D, hwC);
+        const minor = calculateMinorLoss(q_m3s, pipe.D, numElbow, numTee, numNRV);
+        const tdhsingle = staticHead + hf + minor;
+        const safetyHead = tdhsingle * 0.10;
+        const TDH = tdhsingle + safetyHead;
+        const rho=1000,g=9.81;
+        const powerKW = (rho * g * q_m3s * TDH) / (effPct/100) / 1000;
+        // Recommendation logic: Optimal if 1 <= velocity <= 3 m/s and hf <= 0.2 * staticHead
+        const isRecommended = (velocity >= 1 && velocity <= 3) && (hf <= 0.2 * staticHead);
+        const status = isRecommended ? '<span class="recommended">Recommended</span>' : 'Consider Alternative';
+        const velClass = velocity > 3 ? 'warn' : (velocity < 1 ? 'warn' : '');
+        return {velocity, hf, minor, TDH, powerKW, pipeName: pipe.name, status, velClass};
+      }
+
+      const configs = pipes.map(pipe => evaluateConfig(pipe));
+
+      // produce HTML output
+      const out = document.getElementById('summaryArea');
+      out.innerHTML = `
+        <table>
+          <tr><th>Parameter</th><th>Nilai</th></tr>
+          <tr><td>Total volume harus dikuras</td><td>${format(volToRemove,2)} m³</td></tr>
+          <tr><td>Net removal rate (untuk target)</td><td>${format(netRemovalRate,2)} m³/jam</td></tr>
+          <tr><td>Inflow base</td><td>${format(inflowBase,2)} m³/jam</td></tr>
+          <tr><td>Tambahan inflow dari hujan</td><td>${format(qRainTotal,2)} m³/jam (runoff ${format(qRunoff,2)} + direct ${format(qDirect,2)})</td></tr>
+          <tr><td>Total volume dari hujan selama periode</td><td>${format(volRainTotal,2)} m³</td></tr>
+          <tr><td><strong>Flow pompa total yang dibutuhkan</strong></td><td class="good"><strong>${format(qPumpTotal_m3h,2)} m³/jam</strong></td></tr>
+          <tr><td>Planning flow pompa</td><td>${format(planningFlow,2)} m³/jam</td></tr>
+          <tr><td><strong>Waktu estimasi dengan planning flow</strong></td><td>${planningTimeDays}${planningComparison}</td></tr>
+          <tr><td>Static head</td><td>${format(staticHead,2)} m</td></tr>
+          <tr><td><strong>NPSHa (available)</strong></td><td>${format(npsha,2)} m (pastikan NPSHr pompa < ini; asumsi atmosfir standar, tanpa friction suction)</td></tr>
+        </table>
+
+        <h3 style="margin-top:16px;font-weight:600">Perbandingan Konfigurasi Rekomendasi (Single Pipe)</h3>
+        <table>
+          <thead><tr><th>Konfigurasi</th><th>Status</th><th>Vel (m/s)</th><th>Friction (m)</th><th>Minor (m)</th><th>TDH (m)</th><th>Power (kW)</th></tr></thead>
+          <tbody>
+            ${configs.map(cfg => `<tr><td>1 × ${cfg.pipeName}</td><td>${cfg.status}</td><td class="${cfg.velClass}">${format(cfg.velocity,2)}</td><td>${format(cfg.hf,2)}</td><td>${format(cfg.minor,2)}</td><td>${format(cfg.TDH,2)}</td><td>${format(cfg.powerKW,1)}</td></tr>`).join('')}
+          </tbody>
+        </table>
+
+        <canvas id="configChart"></canvas>
+
+        <h3 style="margin-top:16px;font-weight:600">Rekomendasi singkat</h3>
+        <p class="small">Pilih pipa berdasarkan status di atas. Recommended jika velocity 1-3 m/s dan friction loss ≤20% static head. Semua data ditampilkan untuk perbandingan lengkap.</p>
+        <ul class="small">
+          ${configs.map(cfg => `<li>${cfg.pipeName}: ${cfg.status} — Power ≈ ${format(cfg.powerKW,0)} kW (pilih unit 10–20% lebih besar).</li>`).join('')}
+        </ul>
+
+        <p class="small">Catatan teknis: Pastikan NPSH tersedia, periksa kandungan padatan/pasir (pompa slurry bila abrasive), dan sediakan pompa cadangan. TDH sudah termasuk static, friction, minor (dari fitting), dan safety 10%. Estimasi waktu planning: Waktu = Volume to remove / (Planning flow - Total inflow). Jika planning flow ≤ inflow, pompa tidak bisa menguras. <strong>Warning:</strong> Velocity >3 m/s berisiko erosi atau <1 m/s sedimentasi—hindari config kuning.</p>
+
+        <button id="exportBtn" onclick="exportToPDF()">Ekspor ke PDF</button>
+      `;
+
+      // Generate Chart (updated for single pipes)
+      const ctx = document.getElementById('configChart').getContext('2d');
+      if (configChart) configChart.destroy();
+      configChart = new Chart(ctx, {
+        type: 'bar',
+        data: {
+          labels: pipes.map(p => `1 × ${p.name}`),
+          datasets: [{
+            label: 'TDH (m)',
+            data: configs.map(c => c.TDH),
+            backgroundColor: 'rgba(6, 182, 212, 0.6)',
+            borderColor: 'rgba(6, 182, 212, 1)',
+            borderWidth: 1
+          }, {
+            label: 'Power (kW)',
+            data: configs.map(c => c.powerKW),
+            backgroundColor: 'rgba(16, 185, 129, 0.6)',
+            borderColor: 'rgba(16, 185, 129, 1)',
+            borderWidth: 1
+          }]
+        },
+        options: {
+          responsive: true,
+          scales: { y: { beginAtZero: true } },
+          plugins: { legend: { position: 'top' } }
+        }
+      });
+    });
+
+    // Export to PDF function
+    function exportToPDF() {
+      const { jsPDF } = window.jspdf;
+      const doc = new jsPDF();
+      doc.setFontSize(16);
+      doc.text('DrainMaster - Hasil Perhitungan', 20, 20);
+      doc.setFontSize(12);
+      doc.text(document.getElementById('summaryArea').innerText, 20, 40, { maxWidth: 170 });
+      doc.save('drainmaster-report.pdf');
+    }
+
+    document.getElementById('resetBtn').addEventListener('click', ()=> location.reload());
+  </script>
+
+  <!-- bottom action bar (mobile) -->
+  <div class="action-bar" style="display:none">
+    <button id="actionCalc">Hitung</button>
+    <button id="actionExport" style="background:#10b981">Ekspor</button>
+  </div>
+  <script>
+    // wire mobile action bar
+    function showActionBarIfMobile(){
+      if(window.matchMedia('(max-width:900px)').matches){
+        const bar = document.querySelector('.action-bar');
+        if(bar){ bar.style.display = 'flex'; document.getElementById('actionCalc').addEventListener('click', ()=>document.getElementById('calcBtn').click()); document.getElementById('actionExport').addEventListener('click', exportToPDF); }
+      }
+    }
+    window.addEventListener('load', showActionBarIfMobile);
+  </script>
+
+</html>
